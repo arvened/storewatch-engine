@@ -16,6 +16,8 @@ set -uo pipefail
 : "${NICHE_STORES:?NICHE_STORES secret is empty}"
 : "${NICHE:?NICHE is empty}"
 : "${DATA_DIR:?}" "${DB_DIR:?}"
+# Tolerate how a secret was typed on a phone: spaces, line breaks, capitals.
+NICHE=$(printf '%s' "$NICHE" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
 case "$NICHE" in *[!a-z0-9_-]*|"") echo "NICHE must be a-z 0-9 _ -"; exit 2;; esac
 
 DAY=$(date -u +%F)
