@@ -18,6 +18,8 @@ set -uo pipefail
 : "${DATA_DIR:?}" "${DB_DIR:?}"
 # Tolerate how a secret was typed on a phone: spaces, line breaks, capitals.
 NICHE=$(printf '%s' "$NICHE" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+# A token pasted into the wrong secret must never end up in file names or logs.
+case "$NICHE $NICHE_STORES" in *github_pat_*|*ghp_*|*gho_*|*ghs_*) echo "A token is pasted into NICHE or STORES secret - stop."; exit 2;; esac
 case "$NICHE" in *[!a-z0-9_-]*|"") echo "NICHE must be a-z 0-9 _ -"; exit 2;; esac
 
 DAY=$(date -u +%F)
