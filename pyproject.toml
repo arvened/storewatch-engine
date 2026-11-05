@@ -1,0 +1,9 @@
+[project]
+name = "storewatch"
+version = "0.7.0"
+description = "Competitor monitoring for online stores: Shopify, WooCommerce and any shop with standard product markup"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+storewatch = "storewatch.cli:main"

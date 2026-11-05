@@ -1,0 +1,109 @@
+name: Niche
+
+# Template for one niche. To add a niche: copy this file (e.g. niche-tools.yml),
+# change the suffix "_A" in the two lines marked "per niche", add the secrets.
+#
+# Secrets (Settings → Secrets and variables → Actions):
+#   STORES_A         store list, one per line: "address | name"  (never stored in this repo)
+#   NICHE_A          market code, e.g. pl-equip
+#   DATA_REPO        private repository for data, e.g. owner/storewatch-data
+#   DATA_TOKEN       fine-grained token: Contents read/write on DATA_REPO only
+#
+# This repository is public, so its logs are public. run.sh keeps every address,
+# product and price out of the log; everything goes to the private DATA_REPO.
+on:
+  schedule:
+    - cron: "41 5 * * *"     # 05:41 UTC daily
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: niche-${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      STOREWATCH_DELAY: "0.5"
+      STOREWATCH_MAX_PAGES: "300"
+      STOREWATCH_WORKERS: "6"
+    steps:
+      - name: Secrets present?
+        id: check
+        env:
+          S: ${{ secrets.STORES_A }}      # per niche
+          T: ${{ secrets.DATA_TOKEN }}
+          R: ${{ secrets.DATA_REPO }}
+        run: |
+          if [ -n "$S" ] && [ -n "$T" ] && [ -n "$R" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"
+          else echo "::notice::Secrets not set yet - nothing to do."; fi
+
+      - name: Get engine
+        if: steps.check.outputs.ok == 'true'
+        uses: actions/checkout@v4
+
+      - name: Get private data
+        if: steps.check.outputs.ok == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ secrets.DATA_REPO }}
+          token: ${{ secrets.DATA_TOKEN }}
+          path: data
+          persist-credentials: true
+
+      - name: Get private database
+        if: steps.check.outputs.ok == 'true'
+        uses: actions/checkout@v4
+        continue-on-error: true            # first run: branch "db" does not exist yet
+        with:
+          repository: ${{ secrets.DATA_REPO }}
+          token: ${{ secrets.DATA_TOKEN }}
+          ref: db
+          path: db
+
+      - if: steps.check.outputs.ok == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Collect (output stays private)
+        if: steps.check.outputs.ok == 'true'
+        env:
+          NICHE_STORES: ${{ secrets.STORES_A }}   # per niche
+          NICHE: ${{ secrets.NICHE_A }}           # per niche
+          DATA_DIR: data
+          DB_DIR: db-out
+        run: |
+          mkdir -p db-out
+          if [ -f db/storewatch.db.gz ]; then cp db/storewatch.db.gz db-out/; fi
+          bash niche/run.sh
+
+      - name: Save to private repository
+        if: always() && steps.check.outputs.ok == 'true'
+        env:
+          DATA_REPO: ${{ secrets.DATA_REPO }}
+          DATA_TOKEN: ${{ secrets.DATA_TOKEN }}
+        run: |
+          set -e
+          git config --global user.name "storewatch-bot"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          cd data
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -q -m "Niche data $(date -u +%FT%H:%MZ)"
+            for i in 1 2 3; do git push -q origin HEAD && break; git pull -q --rebase; done
+          fi
+          cd ..
+          # Database: one commit on branch "db", overwritten every day (repository does not grow).
+          if [ -f db-out/storewatch.db.gz ]; then
+            cd db-out
+            git init -q -b db
+            git add storewatch.db.gz
+            git commit -q -m "db $(date -u +%F)"
+            git push -q -f "https://x-access-token:${DATA_TOKEN}@github.com/${DATA_REPO}.git" db > /dev/null 2>&1
+          fi
+          echo "saved"
