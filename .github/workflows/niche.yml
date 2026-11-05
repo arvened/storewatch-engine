@@ -6,7 +6,7 @@ name: Niche
 # Secrets (Settings → Secrets and variables → Actions):
 #   STORES_A         store list, one per line: "address | name"  (never stored in this repo)
 #   NICHE_A          market code, e.g. pl-equip
-#   DATA_REPO        private repository for data, e.g. owner/storewatch-data
+#   (data goes to <owner>/storewatch-data; another repo: Actions variable DATA_REPO)
 #   DATA_TOKEN       fine-grained token: Contents read/write on DATA_REPO only
 #
 # This repository is public, so its logs are public. run.sh keeps every address,
@@ -28,6 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
+      DATA_REPO: ${{ vars.DATA_REPO || format('{0}/storewatch-data', github.repository_owner) }}
       STOREWATCH_DELAY: "0.5"
       STOREWATCH_MAX_PAGES: "300"
       STOREWATCH_WORKERS: "6"
@@ -37,9 +38,8 @@ jobs:
         env:
           S: ${{ secrets.STORES_A }}      # per niche
           T: ${{ secrets.DATA_TOKEN }}
-          R: ${{ secrets.DATA_REPO }}
         run: |
-          if [ -n "$S" ] && [ -n "$T" ] && [ -n "$R" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"
+          if [ -n "$S" ] && [ -n "$T" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"
           else echo "::notice::Secrets not set yet - nothing to do."; fi
 
       - name: Get engine
@@ -50,7 +50,7 @@ jobs:
         if: steps.check.outputs.ok == 'true'
         uses: actions/checkout@v4
         with:
-          repository: ${{ secrets.DATA_REPO }}
+          repository: ${{ env.DATA_REPO }}
           token: ${{ secrets.DATA_TOKEN }}
           path: data
           persist-credentials: true
@@ -60,7 +60,7 @@ jobs:
         uses: actions/checkout@v4
         continue-on-error: true            # first run: branch "db" does not exist yet
         with:
-          repository: ${{ secrets.DATA_REPO }}
+          repository: ${{ env.DATA_REPO }}
           token: ${{ secrets.DATA_TOKEN }}
           ref: db
           path: db
@@ -85,7 +85,6 @@ jobs:
       - name: Save to private repository
         if: always() && steps.check.outputs.ok == 'true'
         env:
-          DATA_REPO: ${{ secrets.DATA_REPO }}
           DATA_TOKEN: ${{ secrets.DATA_TOKEN }}
         run: |
           set -e
