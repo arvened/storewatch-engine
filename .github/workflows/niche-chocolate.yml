@@ -24,7 +24,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: niche-${{ github.workflow }}
+  group: niche-engine            # all niches share one db branch: never run two at once
   cancel-in-progress: false
 
 jobs:
