@@ -23,6 +23,11 @@ case "$NICHE $NICHE_STORES" in *github_pat_*|*ghp_*|*gho_*|*ghs_*) echo "A token
 case "$NICHE" in *[!a-z0-9_-]*|"") echo "NICHE must be a-z 0-9 _ -"; exit 2;; esac
 
 DAY=$(date -u +%F)
+# Backup scheduled runs: nothing to do if this niche was already collected today.
+if [ "${GITHUB_EVENT_NAME:-}" = "schedule" ] && grep -q "^$DAY,$NICHE," "$DATA_DIR/usage.csv" 2>/dev/null; then
+  echo "already collected today - backup run skipped"
+  exit 0
+fi
 WORK=$(mktemp -d)
 STORES="$WORK/stores.txt"
 printf '%s\n' "$NICHE_STORES" > "$STORES"

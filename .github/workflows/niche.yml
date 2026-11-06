@@ -14,6 +14,10 @@ name: Niche
 on:
   schedule:
     - cron: "41 5 * * *"     # 05:41 UTC daily
+    # Backups: GitHub may delay or drop scheduled runs; run.sh exits at once
+    # if this niche was already collected today.
+    - cron: "11 10 * * *"
+    - cron: "41 14 * * *"
   workflow_dispatch:
 
 permissions:
