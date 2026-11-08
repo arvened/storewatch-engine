@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS variants (
     tags             TEXT NOT NULL DEFAULT '',
     grams            INTEGER,
     created_at       TEXT NOT NULL DEFAULT '',
+    gtin             TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (snapshot_id, variant_id)
 );
 """
@@ -56,7 +57,7 @@ CREATE TABLE IF NOT EXISTS variants (
 VARIANT_FIELDS = [
     "product_id", "variant_id", "product_title", "variant_title", "handle",
     "sku", "vendor", "product_type", "price", "compare_at_price", "available",
-    "tags", "grams", "created_at",
+    "tags", "grams", "created_at", "gtin",
 ]
 
 
@@ -85,6 +86,8 @@ class Storage:
             self.db.execute("ALTER TABLE variants ADD COLUMN tags TEXT NOT NULL DEFAULT ''")
             self.db.execute("ALTER TABLE variants ADD COLUMN grams INTEGER")
             self.db.execute("ALTER TABLE variants ADD COLUMN created_at TEXT NOT NULL DEFAULT ''")
+        if "gtin" not in vcols:                         # v0.9: barcode, for recall checks
+            self.db.execute("ALTER TABLE variants ADD COLUMN gtin TEXT NOT NULL DEFAULT ''")
         self.db.commit()
 
     def close(self) -> None:

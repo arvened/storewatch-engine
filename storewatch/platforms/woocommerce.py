@@ -15,7 +15,7 @@ import html
 import json
 
 from ..http import FetchError, HttpClient, NotThisPlatform
-from ..models import Variant
+from ..models import Variant, clean_gtin
 
 NAME = "woocommerce"
 PER_PAGE = 100
@@ -77,7 +77,17 @@ def parse_product(p: dict) -> Variant | None:
         compare_at_price=compare,
         available=bool(p.get("is_in_stock", True)),
         tags=", ".join(facts)[:1000],
+        gtin=_gtin_of(p),
     )
+
+
+def _gtin_of(p: dict) -> str:
+    """Barcode, if the shop exposes one (WooCommerce 9.2+ "GTIN, UPC, EAN or ISBN" field, or a plugin)."""
+    for key in ("global_unique_id", "gtin", "ean", "barcode"):
+        g = clean_gtin(p.get(key))
+        if g:
+            return g
+    return ""
 
 
 def _variation_text(v: dict) -> str:
@@ -122,6 +132,7 @@ def parse_variation(v: dict, parent: Variant) -> Variant | None:
         compare_at_price=regular if (regular and regular > price) else None,
         available=bool(v.get("is_in_stock", True)),
         tags=parent.tags,
+        gtin=_gtin_of(v),
     )
 
 
