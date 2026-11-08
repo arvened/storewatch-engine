@@ -24,6 +24,7 @@ class Variant:
     tags: str = ""                 # comma-separated: platform tags + attributes ("Herkunft: Peru")
     grams: int | None = None       # pack weight when the platform states it
     created_at: str = ""           # when the product first appeared in the shop, if published
+    gtin: str = ""                 # barcode (EAN/GTIN/UPC) when the shop publishes it; digits only
 
     @property
     def weight_g(self) -> int | None:
@@ -48,6 +49,14 @@ class Variant:
         if self.compare_at_price and self.compare_at_price > self.price > 0:
             return round((1 - self.price / self.compare_at_price) * 100, 1)
         return None
+
+
+def clean_gtin(value) -> str:
+    """'5906826473019', ' 0 12345 67890 5 ', 'EAN: 5906826473019' -> digits, if 8/12/13/14 long; else ''."""
+    if value is None or isinstance(value, (bool, dict, list)):
+        return ""
+    digits = re.sub(r"\D", "", str(value))
+    return digits if len(digits) in (8, 12, 13, 14) else ""
 
 
 def stable_id(key: str) -> int:

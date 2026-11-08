@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 
 from ..http import FetchError, HttpClient, NotThisPlatform
-from ..models import Variant, parse_price
+from ..models import Variant, clean_gtin, parse_price
 
 NAME = "shopify"
 PAGE_LIMIT = 250
@@ -51,6 +51,7 @@ def parse_products(payload: dict) -> list[Variant]:
                 tags=_tags(p.get("tags")),
                 grams=_int(v.get("grams")),
                 created_at=str(p.get("published_at") or p.get("created_at") or ""),
+                gtin=clean_gtin(v.get("barcode")),
             ))
     return out
 

@@ -16,7 +16,7 @@
                               weekly market report in Polish (comparison with
                               N days ago); --for adds a personal section for
                               one tracked store
-  export --csv FILE [--market M]
+  export --csv FILE [--market M] [--gtin]
                               latest prices of every tracked store as CSV
                               (one row per variant), for analysis
   run [--md FILE] [--json FILE] [--telegram] [--keep N]
@@ -162,6 +162,7 @@ def main(argv: list[str] | None = None, fetcher: CatalogFetcher | None = None) -
     wk.add_argument("--currency", default="PLN", help="local currency for the FX line (PLN, CZK, EUR)")
     cx = sub.add_parser("context"); cx.add_argument("--out", help="write JSON here")
     ex = sub.add_parser("export"); ex.add_argument("--csv", required=True); ex.add_argument("--market")
+    ex.add_argument("--gtin", action="store_true", help="add a last column with the barcode (EAN/GTIN)")
     ex.add_argument("--all", action="store_true", help="every stored snapshot, not only the latest")
     run = sub.add_parser("run")
     run.add_argument("--md", help="write Markdown report to file")
@@ -258,7 +259,7 @@ def main(argv: list[str] | None = None, fetcher: CatalogFetcher | None = None) -
             import csv
             cols = ["market", "store_url", "store", "taken_at", "product_title", "variant_title", "handle",
                     "vendor", "product_type", "price", "compare_at_price", "available",
-                    "weight_g", "price_per_kg", "tags", "created_at"]
+                    "weight_g", "price_per_kg", "tags", "created_at"] + (["gtin"] if args.gtin else [])
             import gzip
             n = 0
             # '.gz' -> compressed file (the permanent daily price history in the data branch).
@@ -277,7 +278,7 @@ def main(argv: list[str] | None = None, fetcher: CatalogFetcher | None = None) -
                                         v.price, "" if v.compare_at_price is None else v.compare_at_price,
                                         int(v.available), v.weight_g or "",
                                         "" if v.price_per_kg is None else v.price_per_kg,
-                                        v.tags, v.created_at])
+                                        v.tags, v.created_at, *([v.gtin] if args.gtin else [])])
                             n += 1
             print(f"Выгружено строк: {n}")
         elif args.cmd == "list":

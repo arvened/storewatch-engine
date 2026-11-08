@@ -15,7 +15,7 @@ import html
 import json
 from html.parser import HTMLParser
 
-from .models import Variant, parse_price, stable_id
+from .models import Variant, clean_gtin, parse_price, stable_id
 
 OUT_OF_STOCK = ("outofstock", "soldout", "discontinued", "out of stock", "oos")
 
@@ -69,7 +69,8 @@ class _Collector(HTMLParser):
         if "product" in a.get("itemtype", "").lower().rsplit("/", 1)[-1]:
             self._in_product = True
         prop = a.get("itemprop", "").lower()
-        if self._in_product and prop in ("name", "price", "pricecurrency", "availability", "sku", "brand") \
+        if self._in_product and prop in ("name", "price", "pricecurrency", "availability", "sku", "brand",
+                                         *GTIN_KEYS) \
                 and prop not in self.micro:
             val = a.get("content") or a.get("href") or a.get("value")
             if val:
@@ -88,6 +89,20 @@ class _Collector(HTMLParser):
         elif self._pending and data.strip():
             self.micro.setdefault(self._pending, data.strip())
             self._pending = None
+
+
+GTIN_KEYS = ("gtin13", "gtin", "gtin14", "gtin12", "gtin8", "ean", "isbn")
+
+
+def _gtin(node) -> str:
+    """First valid barcode in a schema.org node (Product or Offer); '' if none."""
+    if not isinstance(node, dict):
+        return ""
+    for k in GTIN_KEYS:
+        g = clean_gtin(_text(node.get(k)))
+        if g:
+            return g
+    return ""
 
 
 def _walk(node):
@@ -131,6 +146,7 @@ def _offer_rows(offers) -> list[dict]:
             "available": _avail(o.get("availability")),
             "sku": _text(o.get("sku")),
             "name": _text(o.get("name")),
+            "gtin": _gtin(o),
         })
     return rows
 
@@ -159,6 +175,7 @@ def _from_product(node: dict, url: str, group_name: str | None = None) -> list[V
             price=r["price"],
             compare_at_price=r["compare"],
             available=r["available"],
+            gtin=r["gtin"] or _gtin(node),
         ))
     return out
 
@@ -200,8 +217,9 @@ def products_from_html(html: str, url: str) -> list[Variant]:
     m = c.micro
     price = parse_price(m.get("price"))
     if price is not None and m.get("name"):
+        gtin = next((clean_gtin(m[k]) for k in GTIN_KEYS if clean_gtin(m.get(k))), "")
         return [Variant(stable_id(url), stable_id(url + "#"), m["name"], "", url, m.get("sku", ""),
-                        m.get("brand", ""), "", price, None, _avail(m.get("availability")))]
+                        m.get("brand", ""), "", price, None, _avail(m.get("availability")), gtin=gtin)]
 
     # 3. Open Graph product meta
     meta = c.meta
@@ -212,5 +230,7 @@ def products_from_html(html: str, url: str) -> list[Variant]:
         return [Variant(stable_id(url), stable_id(url + "#"), title.strip(), "", url,
                         meta.get("product:retailer_item_id", ""), meta.get("product:brand", ""), "",
                         price, compare if compare and compare > price else None,
-                        _avail(meta.get("product:availability") or meta.get("og:availability")))]
+                        _avail(meta.get("product:availability") or meta.get("og:availability")),
+                        gtin=clean_gtin(meta.get("product:ean") or meta.get("product:gtin")
+                                        or meta.get("product:upc")))]
     return []
