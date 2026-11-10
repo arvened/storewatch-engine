@@ -54,9 +54,9 @@ STATUS=0
   code=$?
   echo "run exit code: $code"
   if [ -z "$(ls -A "$DATA_DIR/history/$NICHE")" ]; then
-    python -m storewatch export --market "$NICHE" --all --csv "$DATA_DIR/history/$NICHE/backfill-$DAY.csv.gz"
+    python -m storewatch export --market "$NICHE" --all --gtin --csv "$DATA_DIR/history/$NICHE/backfill-$DAY.csv.gz"
   else
-    python -m storewatch export --market "$NICHE" --csv "$DATA_DIR/history/$NICHE/$DAY.csv.gz"
+    python -m storewatch export --market "$NICHE" --gtin --csv "$DATA_DIR/history/$NICHE/$DAY.csv.gz"
   fi
   [ -f "$DATA_DIR/reports/$NICHE/$DAY.md" ] && cp "$DATA_DIR/reports/$NICHE/$DAY.md" "$DATA_DIR/reports/$NICHE/latest.md"
   exit "$code"
