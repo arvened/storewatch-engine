@@ -53,10 +53,17 @@ STATUS=0
     --usage "$DATA_DIR/usage.csv"
   code=$?
   echo "run exit code: $code"
+  # Opt-in per niche (GTIN_COMPARE=1): barcodes from Shopify product pages, before the export.
+  [ "${GTIN_COMPARE:-}" = "1" ] && python -m storewatch gtin-fill --market "$NICHE"
   if [ -z "$(ls -A "$DATA_DIR/history/$NICHE")" ]; then
     python -m storewatch export --market "$NICHE" --all --gtin --csv "$DATA_DIR/history/$NICHE/backfill-$DAY.csv.gz"
   else
     python -m storewatch export --market "$NICHE" --gtin --csv "$DATA_DIR/history/$NICHE/$DAY.csv.gz"
+  fi
+  if [ "${GTIN_COMPARE:-}" = "1" ]; then
+    python -m storewatch compare --market "$NICHE" --ebay \
+      --md "$DATA_DIR/reports/$NICHE/$DAY-compare.md" --csv "$DATA_DIR/reports/$NICHE/compare-latest.csv"
+    [ -f "$DATA_DIR/reports/$NICHE/$DAY-compare.md" ] && cp "$DATA_DIR/reports/$NICHE/$DAY-compare.md" "$DATA_DIR/reports/$NICHE/compare-latest.md"
   fi
   [ -f "$DATA_DIR/reports/$NICHE/$DAY.md" ] && cp "$DATA_DIR/reports/$NICHE/$DAY.md" "$DATA_DIR/reports/$NICHE/latest.md"
   exit "$code"

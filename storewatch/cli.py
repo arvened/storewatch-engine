@@ -19,6 +19,13 @@
   export --csv FILE [--market M] [--gtin]
                               latest prices of every tracked store as CSV
                               (one row per variant), for analysis
+  gtin-fill [--market M] [--per-store N]
+                              read barcodes from product pages of Shopify
+                              shops (their catalogue API hides them); cached
+  compare [--market M] [--md FILE] [--csv FILE] [--ebay]
+                              "one product - different prices": same barcode
+                              in several shops (and on eBay with --ebay:
+                              EBAY_CLIENT_ID / EBAY_CLIENT_SECRET)
   run [--md FILE] [--json FILE] [--telegram] [--keep N]
                               fetch all stores, compare with the previous
                               snapshot, print a Markdown report;
@@ -164,6 +171,11 @@ def main(argv: list[str] | None = None, fetcher: CatalogFetcher | None = None) -
     ex = sub.add_parser("export"); ex.add_argument("--csv", required=True); ex.add_argument("--market")
     ex.add_argument("--gtin", action="store_true", help="add a last column with the barcode (EAN/GTIN)")
     ex.add_argument("--all", action="store_true", help="every stored snapshot, not only the latest")
+    gf = sub.add_parser("gtin-fill"); gf.add_argument("--market")
+    gf.add_argument("--per-store", type=int, default=int(os.environ.get("GTIN_FILL_PER_STORE", "150")))
+    cp = sub.add_parser("compare"); cp.add_argument("--market"); cp.add_argument("--md"); cp.add_argument("--csv")
+    cp.add_argument("--ebay", action="store_true", help="add eBay prices (official Browse API)")
+    cp.add_argument("--top", type=int, default=40)
     run = sub.add_parser("run")
     run.add_argument("--md", help="write Markdown report to file")
     run.add_argument("--json", help="write JSON report to file")
@@ -255,8 +267,34 @@ def main(argv: list[str] | None = None, fetcher: CatalogFetcher | None = None) -
             if args.html:
                 with open(args.html, "w", encoding="utf-8") as f:
                     f.write(weekly_html(rep, sample=args.sample))
+        elif args.cmd == "gtin-fill":
+            from . import gtinfill
+            client = (fetcher or _make_fetcher()).client
+            for name, pages, found in gtinfill.fill(db, client, args.market, args.per_store):
+                print(f"gtin-fill {name}: pages {pages}, barcodes {found}")
+        elif args.cmd == "compare":
+            from . import compare as cmp, ebay
+            items = cmp.collect(db, args.market)
+            if args.ebay:
+                if not ebay.configured():
+                    print("eBay: EBAY_CLIENT_ID / EBAY_CLIENT_SECRET not set - skipped")
+                else:
+                    try:
+                        print(f"eBay calls: {ebay.refresh(db, cmp.ebay_candidates(items))}")
+                    except ebay.EbayError as e:
+                        print(f"eBay: {e}")
+                    cmp.add_ebay(items, ebay.offers(db))
+            rows = cmp.compare(items, cmp.eur_rates())
+            text = cmp.to_markdown(rows, top=args.top)
+            if args.md:
+                with open(args.md, "w", encoding="utf-8") as f:
+                    f.write(text)
+            if args.csv:
+                cmp.to_csv(rows, args.csv)
+            print(f"compare: {len(rows)} barcodes in 2+ places")
         elif args.cmd == "export":
             import csv
+            from .gtinfill import cached as _gcache
             cols = ["market", "store_url", "store", "taken_at", "product_title", "variant_title", "handle",
                     "vendor", "product_type", "price", "compare_at_price", "available",
                     "weight_g", "price_per_kg", "tags", "created_at"] + (["gtin"] if args.gtin else [])
@@ -269,6 +307,7 @@ def main(argv: list[str] | None = None, fetcher: CatalogFetcher | None = None) -
                 w = csv.writer(f)
                 w.writerow(cols)
                 for s in db.stores(args.market):
+                    gc = _gcache(db, s["url"]) if args.gtin else {}
                     # --all: every stored snapshot, oldest first (one-time backfill of history).
                     snaps = db.last_ok_snapshots(s["url"], 10 ** 6 if args.all else 1)
                     for snap in reversed(snaps):
@@ -278,7 +317,7 @@ def main(argv: list[str] | None = None, fetcher: CatalogFetcher | None = None) -
                                         v.price, "" if v.compare_at_price is None else v.compare_at_price,
                                         int(v.available), v.weight_g or "",
                                         "" if v.price_per_kg is None else v.price_per_kg,
-                                        v.tags, v.created_at, *([v.gtin] if args.gtin else [])])
+                                        v.tags, v.created_at, *([v.gtin or gc.get(v.variant_id, "")] if args.gtin else [])])
                             n += 1
             print(f"Выгружено строк: {n}")
         elif args.cmd == "list":

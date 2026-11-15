@@ -30,11 +30,14 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
     env:
       DATA_REPO: ${{ vars.DATA_REPO || format('{0}/storewatch-data', github.repository_owner) }}
       STOREWATCH_DELAY: "0.5"
-      STOREWATCH_MAX_PAGES: "300"
+      STOREWATCH_MAX_PAGES: "2500"      # read big catalogues fully (was 300)
+      GTIN_COMPARE: "1"                 # barcodes from Shopify pages + "one product - different prices"
+      GTIN_FILL_PER_STORE: "150"        # product pages per Shopify shop per run (cache fills over days)
+      EBAY_MAX_CALLS: "1500"            # eBay Browse API calls per run (free limit 5000/day)
       STOREWATCH_WORKERS: "6"
     steps:
       - name: Secrets present?
@@ -81,6 +84,8 @@ jobs:
           NICHE: ${{ secrets.NICHE_D }}           # per niche
           DATA_DIR: data
           DB_DIR: db-out
+          EBAY_CLIENT_ID: ${{ secrets.EBAY_CLIENT_ID }}          # optional; without it eBay is skipped
+          EBAY_CLIENT_SECRET: ${{ secrets.EBAY_CLIENT_SECRET }}
         run: |
           mkdir -p db-out
           if [ -f db/storewatch.db.gz ]; then cp db/storewatch.db.gz db-out/; fi
