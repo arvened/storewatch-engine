@@ -98,8 +98,9 @@ def to_markdown(rows: list[dict], top: int = 40, today: str | None = None) -> st
         (f"Экономия, если брать там, где дешевле: медиана **{st.median([r['saving_pct'] for r in diff]):.1f}%** "
          f"({st.median([r['saving_eur'] for r in diff]):.2f} €), максимум {max(r['saving_pct'] for r in diff):.1f}%."
          if diff else "Цены везде одинаковые."),
-        f"Корзина из всех {len(rows)} товаров: {hi_sum:,.0f} € по самой высокой цене, {lo_sum:,.0f} € по самой низкой "
-        f"(−{(hi_sum - lo_sum) / hi_sum * 100 if hi_sum else 0:.1f}%).".replace(",", " "),
+        f"Корзина из всех {len(rows)} товаров: {hi_sum:,.0f} € по самой высокой цене, ".replace(",", " ")[:-2] + ", "
+        + f"{lo_sum:,.0f} € по самой низкой ".replace(",", " ")
+        + f"(−{(hi_sum - lo_sum) / hi_sum * 100 if hi_sum else 0:.1f}%).",
         "", "## Где дешевле всего (сколько раз)", "",
     ]
     for k, n in sorted(cheapest.items(), key=lambda x: -x[1]):
