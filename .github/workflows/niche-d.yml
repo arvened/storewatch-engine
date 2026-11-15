@@ -5,6 +5,8 @@ name: Niche D
 #
 # Secrets (Settings → Secrets and variables → Actions):
 #   STORES_A         store list, one per line: "address | name"  (never stored in this repo)
+#                    Niche D: if the private data repo has stores/niche-d.txt, that file wins
+#                    (so the list can be edited without touching secrets).
 #   NICHE_A          market code, e.g. pl-equip
 #   (data goes to <owner>/storewatch-data; another repo: Actions variable DATA_REPO)
 #   DATA_TOKEN       fine-grained token: Contents read/write on DATA_REPO only
@@ -43,10 +45,10 @@ jobs:
       - name: Secrets present?
         id: check
         env:
-          S: ${{ secrets.STORES_D }}      # per niche
           T: ${{ secrets.DATA_TOKEN }}
         run: |
-          if [ -n "$S" ] && [ -n "$T" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"
+          # store list: secret STORES_D or file stores/niche-d.txt in the private data repo (checked later)
+          if [ -n "$T" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"
           else echo "::notice::Secrets not set yet - nothing to do."; fi
 
       - name: Get engine
@@ -80,7 +82,7 @@ jobs:
       - name: Collect (output stays private)
         if: steps.check.outputs.ok == 'true'
         env:
-          NICHE_STORES: ${{ secrets.STORES_D }}   # per niche
+          STORES_SECRET: ${{ secrets.STORES_D }}  # per niche (fallback)
           NICHE: ${{ secrets.NICHE_D }}           # per niche
           DATA_DIR: data
           DB_DIR: db-out
@@ -89,6 +91,8 @@ jobs:
         run: |
           mkdir -p db-out
           if [ -f db/storewatch.db.gz ]; then cp db/storewatch.db.gz db-out/; fi
+          if [ -s data/stores/niche-d.txt ]; then NICHE_STORES="$(cat data/stores/niche-d.txt)"; else NICHE_STORES="$STORES_SECRET"; fi
+          export NICHE_STORES
           bash niche/run.sh
 
       - name: Save to private repository
