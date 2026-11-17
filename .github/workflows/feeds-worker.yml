@@ -1,0 +1,52 @@
+name: Feeds worker (Cloudflare deploy)
+
+# Uploads cloudflare/feed-worker.js to Cloudflare and sets its GITHUB_TOKEN secret,
+# so nobody has to paste code in the Cloudflare editor (it does not paste on iPhone).
+# Secrets (Settings → Secrets and variables → Actions):
+#   CLOUDFLARE_API_TOKEN  Cloudflare API token, template "Edit Cloudflare Workers"
+#   FEEDS_READ_TOKEN      GitHub fine-grained token, Contents: Read-only, ONLY storewatch-data
+# Optional variable CLOUDFLARE_ACCOUNT_ID (only if the token sees several accounts).
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["cloudflare/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Secrets present?
+        id: check
+        env:
+          A: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          B: ${{ secrets.FEEDS_READ_TOKEN }}
+        run: |
+          if [ -n "$A" ] && [ -n "$B" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"
+          else echo "::notice::CLOUDFLARE_API_TOKEN or FEEDS_READ_TOKEN not set - nothing to do."; fi
+
+      - if: steps.check.outputs.ok == 'true'
+        uses: actions/checkout@v4
+
+      - if: steps.check.outputs.ok == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Deploy worker and set its secret
+        if: steps.check.outputs.ok == 'true'
+        working-directory: cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          FEEDS_READ_TOKEN: ${{ secrets.FEEDS_READ_TOKEN }}
+          ACC: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -e
+          [ -n "$ACC" ] && export CLOUDFLARE_ACCOUNT_ID="$ACC"
+          npx --yes wrangler@4 deploy
+          printf '%s' "$FEEDS_READ_TOKEN" | npx --yes wrangler@4 secret put GITHUB_TOKEN
+          echo "deployed"
