@@ -6,7 +6,7 @@
 #   clients/<slug>/porownanie-<day>.csv   (opens in Google Sheets / Excel)
 #   clients/<slug>/podsumowanie-<day>.md
 # If the folder also has feed.txt, a Ceneo XML feed is written to clients/<slug>/feed.xml
-# (overwritten daily). feed.txt lines:  currency=EUR  markup=25  add=0  (rate=4.3 instead of currency)
+# (overwritten daily) and to feeds/<code>.xml for the secret link. feed.txt lines:  currency=EUR  markup=25  add=0  (rate=4.3 instead of currency)
 # A folder with a file named "stop" is skipped. Everything stays in the PRIVATE data repo;
 # the public log shows only counts.
 set -uo pipefail
@@ -45,7 +45,16 @@ for dir in "$DATA_DIR"/clients/*/; do
       cur=$(opt currency | tr -cd 'A-Za-z'); rate=$(num rate)
       [ -n "$cur" ] && fargs+=(--currency "$cur")
       [ "$rate" != "0" ] && fargs+=(--rate "$rate")
-      python -m storewatch feed "${fargs[@]}"
+      if python -m storewatch feed "${fargs[@]}"; then
+        # Secret link: a random code made once per client (kept in feed-link.txt, never printed).
+        # The feed is copied to feeds/<code>.xml; the Cloudflare worker (cloudflare/feed-worker.js)
+        # serves it at https://<worker>/feeds/<code>.xml. Delete feed-link.txt to change the link.
+        [ -s "$dir/feed-link.txt" ] || python -c "import secrets; print(secrets.token_hex(16))" > "$dir/feed-link.txt"
+        code=$(tr -cd 'a-f0-9' < "$dir/feed-link.txt")
+        if [ ${#code} -ge 24 ]; then
+          mkdir -p "$DATA_DIR/feeds" && cp "$dir/feed.xml" "$DATA_DIR/feeds/$code.xml"
+        fi
+      fi
     fi
   } >> "$LOG" 2>&1
   N=$((N+1))
