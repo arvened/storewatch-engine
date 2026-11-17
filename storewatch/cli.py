@@ -26,6 +26,11 @@
                               "one product - different prices": same barcode
                               in several shops (and on eBay with --ebay:
                               EBAY_CLIENT_ID / EBAY_CLIENT_SECRET)
+  feed --xml FILE [--market M] [--currency EUR | --rate R] [--markup PCT] [--add X]
+                              latest prices and stock as a Ceneo XML offers feed
+                              (Apilo, BaseLinker, Shoper import it); price is
+                              converted (NBP mid rate or fixed) and marked up:
+                              price x rate x (1 + PCT/100) + X
   run [--md FILE] [--json FILE] [--telegram] [--keep N]
                               fetch all stores, compare with the previous
                               snapshot, print a Markdown report;
@@ -176,6 +181,11 @@ def main(argv: list[str] | None = None, fetcher: CatalogFetcher | None = None) -
     cp = sub.add_parser("compare"); cp.add_argument("--market"); cp.add_argument("--md"); cp.add_argument("--csv")
     cp.add_argument("--ebay", action="store_true", help="add eBay prices (official Browse API)")
     cp.add_argument("--top", type=int, default=40)
+    fd = sub.add_parser("feed"); fd.add_argument("--xml", required=True); fd.add_argument("--market")
+    fd.add_argument("--currency", help="supplier currency, converted to PLN at today's NBP mid rate")
+    fd.add_argument("--rate", type=float, help="fixed conversion rate instead of NBP")
+    fd.add_argument("--markup", type=float, default=0.0, help="markup in percent")
+    fd.add_argument("--add", type=float, default=0.0, help="fixed amount added after markup")
     run = sub.add_parser("run")
     run.add_argument("--md", help="write Markdown report to file")
     run.add_argument("--json", help="write JSON report to file")
@@ -320,6 +330,22 @@ def main(argv: list[str] | None = None, fetcher: CatalogFetcher | None = None) -
                                         v.tags, v.created_at, *([v.gtin or gc.get(v.variant_id, "")] if args.gtin else [])])
                             n += 1
             print(f"Выгружено строк: {n}")
+        elif args.cmd == "feed":
+            from . import feed
+            rate = args.rate or 1.0
+            if not args.rate and args.currency and args.currency.upper() != "PLN":
+                try:
+                    rate = feed.nbp_rate(args.currency)
+                except (OSError, ValueError, KeyError) as e:
+                    print(f"Курс NBP не получен ({e}) - фид не обновлён", file=sys.stderr)
+                    return 1
+            items = feed.collect(db, args.market)
+            xml = feed.ceneo_xml(items, rate, args.markup, args.add)
+            tmp = args.xml + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                f.write(xml)
+            os.replace(tmp, args.xml)
+            print(f"Фид: товаров {len(items)}, курс {rate}")
         elif args.cmd == "list":
             stores = db.stores(args.market)
             if not stores:
