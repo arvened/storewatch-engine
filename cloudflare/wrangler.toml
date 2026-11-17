@@ -1,0 +1,5 @@
+# Deployed by .github/workflows/feeds-worker.yml (no secrets here).
+name = "eupriceindex-feeds"
+main = "feed-worker.js"
+compatibility_date = "2026-11-01"
+workers_dev = true
